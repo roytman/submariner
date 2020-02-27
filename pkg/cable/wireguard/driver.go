@@ -1,11 +1,13 @@
-package wg
+package wireguard
 
 import (
 	"fmt"
-	"github.com/vishvananda/netlink"
-	"k8s.io/klog"
 	"net"
 	"os"
+
+	"github.com/submariner-io/submariner/pkg/cable"
+	"github.com/vishvananda/netlink"
+	"k8s.io/klog"
 
 	"github.com/submariner-io/submariner/pkg/types"
 	"golang.zx2c4.com/wireguard/wgctrl"
@@ -26,6 +28,11 @@ const (
 	//deviceType = wgtypes.LinuxKernel
 )
 
+func init() {
+	cable.AddDriver("wg", NewWGDriver)
+	cable.AddDriver("wireguard", NewWGDriver)
+}
+
 type wireguard struct {
 	localSubnets  []*net.IPNet
 	localEndpoint types.SubmarinerEndpoint
@@ -37,7 +44,7 @@ type wireguard struct {
 }
 
 // NewDriver creates a new Wireguard driver
-func NewDriver(localSubnets []string, localEndpoint types.SubmarinerEndpoint) (*wireguard, error) {
+func NewWGDriver(localSubnets []string, localEndpoint types.SubmarinerEndpoint) (cable.Driver, error) {
 
 	var err error
 
