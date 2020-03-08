@@ -2,6 +2,7 @@ package wireguard
 
 import (
 	"fmt"
+	"github.com/submariner-io/submariner/pkg/log"
 	"net"
 	"os"
 
@@ -43,7 +44,7 @@ type wireguard struct {
 	//logFile string
 }
 
-// NewDriver creates a new Wireguard driver
+// NewWGDriver creates a new Wireguard driver
 func NewWGDriver(localSubnets []string, localEndpoint types.SubmarinerEndpoint) (cable.Driver, error) {
 
 	var err error
@@ -140,6 +141,7 @@ func NewWGDriver(localSubnets []string, localEndpoint types.SubmarinerEndpoint) 
 		return nil, fmt.Errorf("failed to configure wireguard device: %v", err)
 	}
 
+	klog.V(log.TRACE).Infof("Initialized wireguard %s with publicKey %s", DefaultDeviceName, pub.String())
 	return &wg, nil
 }
 
@@ -177,6 +179,7 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 	if remoteKey, err = wgtypes.ParseKey(key); err != nil {
 		return "", fmt.Errorf("failed to parse public key %s: %v", key, err)
 	}
+	klog.V(log.TRACE).Infof("Connecting endpoint %s with publicKey %s", remoteIP.String(), pub.String())
 	var oldKey wgtypes.Key
 	if oldKey, found = w.peers[remoteEndpoint.Spec.ClusterID]; found {
 		if oldKey.String() == remoteKey.String() {
@@ -204,11 +207,11 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 	// Set peer subnets
 	allowedIPs := make([]net.IPNet, len(remoteEndpoint.Spec.Subnets))
 	var cidr *net.IPNet
-	for _, sn := range remoteEndpoint.Spec.Subnets {
+	for i, sn := range remoteEndpoint.Spec.Subnets {
 		if _, cidr, err = net.ParseCIDR(sn); err != nil {
 			return "", fmt.Errorf("failed to parse subnet %s: %v", sn, err)
 		}
-		allowedIPs = append(allowedIPs, *cidr)
+		allowedIPs[i] = *cidr
 	}
 
 	// configure peer
@@ -247,6 +250,8 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 			return "", fmt.Errorf("failed to add route %s: %v", route.String(), err)
 		}
 	}
+
+	klog.V(log.TRACE).Infof("Connected endpoint peer %+v", peerCfg)
 
 	return ip, nil
 }
