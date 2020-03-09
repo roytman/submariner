@@ -2,15 +2,15 @@ package wireguard
 
 import (
 	"fmt"
-	"github.com/submariner-io/submariner/pkg/log"
 	"net"
 	"os"
 
-	"github.com/submariner-io/submariner/pkg/cable"
-	"github.com/vishvananda/netlink"
 	"k8s.io/klog"
 
+	"github.com/submariner-io/submariner/pkg/cable"
+	"github.com/submariner-io/submariner/pkg/log"
 	"github.com/submariner-io/submariner/pkg/types"
+	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
@@ -32,6 +32,7 @@ const (
 )
 
 func init() {
+	// uncomment the next line to set it to the default
 	// cable.SetDefautCableDriver(cableDriverName)
 	cable.AddDriver(cableDriverName, NewWGDriver)
 }
@@ -181,7 +182,7 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 	if remoteKey, err = wgtypes.ParseKey(key); err != nil {
 		return "", fmt.Errorf("failed to parse public key %s: %v", key, err)
 	}
-	klog.V(log.TRACE).Infof("Connecting endpoint %s with publicKey %s", remoteIP.String(), pub.String())
+	klog.V(log.TRACE).Infof("Connecting endpoint %s with publicKey %s", remoteIP.String(), remoteKey.String())
 	var oldKey wgtypes.Key
 	if oldKey, found = w.peers[remoteEndpoint.Spec.ClusterID]; found {
 		if oldKey.String() == remoteKey.String() {
