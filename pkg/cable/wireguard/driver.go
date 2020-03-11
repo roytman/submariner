@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 
 	"k8s.io/klog"
 
@@ -33,7 +34,8 @@ const (
 
 func init() {
 	// uncomment the next line to set it to the default
-	// cable.SetDefautCableDriver(cableDriverName)
+	fmt.Printf("!!!!! WG driver init")
+	cable.SetDefautCableDriver(cableDriverName)
 	cable.AddDriver(cableDriverName, NewWGDriver)
 }
 
@@ -41,6 +43,7 @@ type wireguard struct {
 	localSubnets  []*net.IPNet
 	localEndpoint types.SubmarinerEndpoint
 	peers         map[string]wgtypes.Key // clusterID -> publicKey
+	mutex         sync.Mutex
 	client        *wgctrl.Client
 	link          netlink.Link
 	//debug   bool
@@ -184,6 +187,8 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 	}
 	klog.V(log.TRACE).Infof("Connecting endpoint %s with publicKey %s", remoteIP.String(), remoteKey.String())
 	var oldKey wgtypes.Key
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 	if oldKey, found = w.peers[remoteEndpoint.Spec.ClusterID]; found {
 		if oldKey.String() == remoteKey.String() {
 			//TODO check that peer config has not changed (eg allowedIPs)
@@ -197,6 +202,7 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 				Remove:    true,
 			},
 		}
+		klog.Infof("Delete existing peer key %s", oldKey.String() )
 		if err = w.client.ConfigureDevice(DefaultDeviceName, wgtypes.Config{
 			ReplacePeers: true,
 			Peers:        peerCfg,
@@ -205,7 +211,6 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 		}
 		delete(w.peers, remoteEndpoint.Spec.ClusterID)
 	}
-	w.peers[remoteEndpoint.Spec.ClusterID] = remoteKey
 
 	// Set peer subnets
 	allowedIPs := make([]net.IPNet, len(remoteEndpoint.Spec.Subnets))
@@ -216,7 +221,7 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 		}
 		allowedIPs[i] = *cidr
 	}
-
+	klog.Infof("add remote peer with peer key %s, remote IP %s", remoteKey, remoteIP )
 	// configure peer
 	peerCfg := []wgtypes.PeerConfig{{
 		PublicKey:    remoteKey,
@@ -254,6 +259,7 @@ func (w *wireguard) ConnectToEndpoint(remoteEndpoint types.SubmarinerEndpoint) (
 		}
 	}
 
+	w.peers[remoteEndpoint.Spec.ClusterID] = remoteKey
 	klog.V(log.TRACE).Infof("Connected endpoint peer %+v", peerCfg)
 
 	return ip, nil
@@ -264,7 +270,8 @@ func (w *wireguard) DisconnectFromEndpoint(remoteEndpoint types.SubmarinerEndpoi
 	var found bool
 
 	var remoteKey wgtypes.Key
-
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 	// public key
 	var key string
 	if key, found = remoteEndpoint.Spec.BackendConfig[PublicKey]; !found {
